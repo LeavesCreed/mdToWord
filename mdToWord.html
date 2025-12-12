@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MD to Word Converter</title>
+  <!-- Tailwind CSS v3 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  
+  <!-- Tailwind Configuration -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#1e40af',
+            secondary: '#3b82f6',
+            accent: '#60a5fa',
+            light: '#eff6ff',
+            dark: '#1e3a8a'
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+          boxShadow: {
+            'custom': '0 4px 20px 0 rgba(0, 0, 0, 0.1)',
+            'hover': '0 10px 25px 0 rgba(0, 0, 0, 0.15)',
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .transition-custom {
+        transition: all 0.3s ease;
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .bg-gradient {
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      }
+    }
+  </style>
+  
+  <!-- Custom Styles -->
+  <style>
+    .dropzone.active {
+      border-color: #3b82f6;
+      background-color: rgba(59, 130, 246, 0.1);
+    }
+    
+    .file-item {
+      animation: fadeIn 0.3s ease-in-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .btn {
+      transition: all 0.2s ease;
+    }
+    
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+    
+    .btn:active {
+      transform: translateY(0);
+    }
+    
+    .template-option.selected {
+      border-color: #3b82f6;
+      background-color: rgba(59, 130, 246, 0.1);
+    }
+    
+    .progress-bar {
+      transition: width 0.3s ease;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Header -->
+  <header class="bg-gradient text-white shadow-md">
+    <div class="container mx-auto px-4 py-6 flex flex-col md:flex-row items-center justify-between">
+      <div class="flex items-center mb-4 md:mb-0">
+        <i class="fa fa-file-text-o text-3xl mr-3"></i>
+        <h1 class="text-2xl font-bold">MD to Word Converter</h1>
+      </div>
+      <div class="flex items-center space-x-4">
+        <button id="theme-toggle" class="p-2 rounded-full hover:bg-white/20 transition-custom">
+          <i class="fa fa-moon-o"></i>
+        </button>
+        <button id="help-btn" class="p-2 rounded-full hover:bg-white/20 transition-custom">
+          <i class="fa fa-question-circle"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container mx-auto px-4 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <!-- Left Column - Upload Area -->
+      <div class="lg:col-span-1">
+        <div class="bg-white rounded-xl shadow-custom p-6 mb-6">
+          <h2 class="text-xl font-semibold text-gray-800 mb-4">Upload Markdown Files</h2>
+          
+          <!-- Dropzone -->
+          <div id="dropzone" class="dropzone border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-secondary transition-custom">
+            <div class="flex flex-col items-center justify-center">
+              <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-4"></i>
+              <p class="text-gray-600 mb-2">Drag & drop your Markdown files here</p>
+              <p class="text-gray-500 text-sm mb-4">or</p>
+              <label class="btn bg-secondary hover:bg-primary text-white px-6 py-2 rounded-lg cursor-pointer">
+                <span>Choose Files</span>
+                <input type="file" id="file-input" class="hidden" accept=".md,.markdown,.txt" multiple>
+              </label>
+            </div>
+          </div>
+          
+          <!-- Uploaded Files List -->
+          <div id="files-container" class="mt-6 hidden">
+            <h3 class="text-lg font-medium text-gray-700 mb-3">Uploaded Files</h3>
+            <ul id="files-list" class="space-y-2 max-h-60 overflow-y-auto scrollbar-hide"></ul>
+          </div>
+        </div>
+        
+        <!-- Conversion Options -->
+        <div class="bg-white rounded-xl shadow-custom p-6">
+          <h2 class="text-xl font-semibold text-gray-800 mb-4">Conversion Options</h2>
+          
+          <!-- Template Selection -->
+          <div class="mb-6">
+            <label class="block text-gray-700 font-medium mb-2">Document Template</label>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="template-option selected border-2 border-gray-200 rounded-lg p-3 cursor-pointer hover:border-secondary transition-custom">
+                <div class="flex items-center">
+                  <div class="w-10 h-10 bg-light rounded flex items-center justify-center mr-3">
+                    <i class="fa fa-file-text-o text-secondary"></i>
+                  </div>
+                  <div>
+                    <p class="font-medium text-gray-800">Standard</p>
+                    <p class="text-xs text-gray-500">Clean & simple</p>
+                  </div>
+                </div>
+              </div>
+              <div class="template-option border-2 border-gray-200 rounded-lg p-3 cursor-pointer hover:border-secondary transition-custom">
+                <div class="flex items-center">
+                  <div class="w-10 h-10 bg-light rounded flex items-center justify-center mr-3">
+                    <i class="fa fa-file-text text-secondary"></i>
+                  </div>
+                  <div>
+                    <p class="font-medium text-gray-800">Professional</p>
+                    <p class="text-xs text-gray-500">Formal styling</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Format Options -->
+          <div class="mb-6">
+            <label class="block text-gray-700 font-medium mb-2">Format Options</label>
+            <div class="space-y-2">
+              <label class="flex items-center">
+                <input type="checkbox" class="form-checkbox h-5 w-5 text-secondary" checked>
+                <span class="ml-2 text-gray-700">Preserve Markdown formatting</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" class="form-checkbox h-5 w-5 text-secondary" checked>
+                <span class="ml-2 text-gray-700">Include table of contents</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" class="form-checkbox h-5 w-5 text-secondary">
+                <span class="ml-2 text-gray-700">Embed images</span>
+              </label>
+            </div>
+          </div>
+          
+          <!-- Convert Button -->
+          <button id="convert-btn" class="btn w-full bg-primary hover:bg-dark text-white py-3 rounded-lg font-medium disabled:bg-gray-400 disabled:cursor-not-allowed">
+            <i class="fa fa-magic mr-2"></i> Convert to Word
+          </button>
+        </div>
+      </div>
+      
+      <!-- Right Column - Preview & Results -->
+      <div class="lg:col-span-2">
+        <!-- Preview Area -->
+        <div class="bg-white rounded-xl shadow-custom p-6 mb-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold text-gray-800">Preview</h2>
+            <div class="flex space-x-2">
+              <button id="editor-view-btn" class="px-3 py-1 rounded text-gray-600 hover:bg-light transition-custom">Editor</button>
+              <button id="markdown-view-btn" class="px-3 py-1 rounded bg-light text-secondary font-medium">Markdown</button>
+              <button id="html-view-btn" class="px-3 py-1 rounded text-gray-600 hover:bg-light transition-custom">HTML</button>
+            </div>
+          </div>
+          
+          <!-- Preview Tabs -->
+          <div id="preview-container" class="border border-gray-200 rounded-lg min-h-[500px]">
+            
+            <!-- Markdown Editor (Hidden by default) -->
+            <div id="markdown-editor" class="p-6 overflow-hidden hidden h-full" style="min-height: 500px;">
+              <textarea id="md-editor-textarea" class="w-full h-full p-6 border-0 focus:ring-0 resize-none font-mono text-sm" placeholder="Enter your Markdown content here..."></textarea>
+            </div>
+            
+            <!-- Markdown Preview -->
+            <div id="markdown-preview" class="p-6 overflow-auto" style="min-height: 500px;">
+              <div class="flex items-center justify-center h-full text-gray-500">
+                <div class="text-center">
+                  <i class="fa fa-file-text-o text-4xl mb-3"></i>
+                  <p>Upload a file or use the editor to see preview</p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- HTML Preview (Hidden by default) -->
+            <div id="html-preview" class="p-6 overflow-auto hidden" style="min-height: 500px;">
+              <div class="flex items-center justify-center h-full text-gray-500">
+                <div class="text-center">
+                  <i class="fa fa-code text-4xl mb-3"></i>
+                  <p>Upload a file or use the editor to see HTML preview</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Conversion Results -->
+        <div id="results-container" class="bg-white rounded-xl shadow-custom p-6 hidden">
+          <h2 class="text-xl font-semibold text-gray-800 mb-4">Conversion Results</h2>
+          
+          <!-- Progress Bar (Hidden by default) -->
+          <div id="progress-container" class="mb-6 hidden">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-sm font-medium text-gray-700">Converting...</span>
+              <span id="progress-percentage" class="text-sm font-medium text-gray-700">0%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+              <div id="progress-bar" class="bg-secondary h-2.5 rounded-full progress-bar" style="width: 0%"></div>
+            </div>
+          </div>
+          
+          <!-- Results List -->
+          <div id="results-list" class="space-y-4"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  
+  <!-- Footer -->
+  <footer class="bg-gray-800 text-white py-8 mt-12">
+    <div class="container mx-auto px-4">
+      <div class="flex flex-col md:flex-row justify-between items-center">
+        <div class="mb-4 md:mb-0">
+          <h3 class="text-lg font-semibold flex items-center">
+            <i class="fa fa-file-text-o mr-2"></i> MD to Word Converter
+          </h3>
+          <p class="text-gray-400 text-sm mt-1">A simple tool to convert Markdown files to Word documents</p>
+        </div>
+        <div class="flex space-x-6">
+          <a href="#" class="text-gray-400 hover:text-white transition-custom">
+            <i class="fa fa-github text-xl"></i>
+          </a>
+          <a href="#" class="text-gray-400 hover:text-white transition-custom">
+            <i class="fa fa-twitter text-xl"></i>
+          </a>
+          <a href="#" class="text-gray-400 hover:text-white transition-custom">
+            <i class="fa fa-envelope text-xl"></i>
+          </a>
+        </div>
+      </div>
+      <div class="border-t border-gray-700 mt-6 pt-6 text-center text-gray-400 text-sm">
+        &copy; 2025 MD to Word Converter. All rights reserved.
+      </div>
+    </div>
+  </footer>
+  
+  <!-- Help Modal -->
+  <div id="help-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold text-gray-800">How to Use</h2>
+        <button id="close-help" class="text-gray-500 hover:text-gray-700">
+          <i class="fa fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <h3 class="text-lg font-semibold text-gray-700">1. Upload Your Files</h3>
+          <p class="text-gray-600">Drag and drop your Markdown files into the upload area or click "Choose Files" to browse from your computer.</p>
+        </div>
+        <div>
+          <h3 class="text-lg font-semibold text-gray-700">2. Configure Conversion Options</h3>
+          <p class="text-gray-600">Select a template and adjust the format options according to your preferences.</p>
+        </div>
+        <div>
+          <h3 class="text-lg font-semibold text-gray-700">3. Preview Your Content</h3>
+          <p class="text-gray-600">Review the Markdown or HTML preview to ensure everything looks correct before conversion.</p>
+        </div>
+        <div>
+          <h3 class="text-lg font-semibold text-gray-700">4. Convert and Download</h3>
+          <p class="text-gray-600">Click "Convert to Word" to start the conversion process. Once completed, download your Word documents.</p>
+        </div>
+        <div class="bg-light p-4 rounded-lg">
+          <h3 class="text-lg font-semibold text-gray-700 mb-2">Supported Markdown Features</h3>
+          <ul class="list-disc list-inside text-gray-600 space-y-1">
+            <li>Headings (H1-H6)</li>
+            <li>Bold and Italic text</li>
+            <li>Lists (ordered and unordered)</li>
+            <li>Links and Images</li>
+            <li>Tables</li>
+            <li>Code blocks and inline code</li>
+            <li>Blockquotes</li>
+            <li>Horizontal rules</li>
+          </ul>
+        </div>
+      </div>
+      <div class="mt-6 text-center">
+        <button id="close-help-btn" class="btn bg-secondary hover:bg-primary text-white px-6 py-2 rounded-lg">
+          Got it!
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success Notification -->
+  <div id="notification" class="fixed bottom-6 right-6 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center">
+    <i class="fa fa-check-circle mr-2"></i>
+    <span id="notification-message">Conversion successful!</span>
+  </div>
+
+  <!-- Required Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/core.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/languages/matlab.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.min.css">
+  
+  <!-- Application Script -->
+  <script>
+    // Initialize markdown-it with math support
+    const md = window.markdownit({
+      html: true,
+      linkify: true,
+      typographer: true,
+      highlight: function (str, lang) {
+        if (lang && lang === 'matlab') {
+          try {
+            return '<pre class="hljs"><code>' +
+                   hljs.highlight(str, { language: 'matlab' }).value +
+                   '</code></pre>';
+          } catch (__) {}
+        }
+        return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
+      }
+    });
+    
+    // DOM Elements
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('file-input');
+    const filesContainer = document.getElementById('files-container');
+    const filesList = document.getElementById('files-list');
+    const convertBtn = document.getElementById('convert-btn');
+    const markdownEditor = document.getElementById('markdown-editor');
+    const markdownPreview = document.getElementById('markdown-preview');
+    const htmlPreview = document.getElementById('html-preview');
+    const mdEditorTextarea = document.getElementById('md-editor-textarea');
+    const editorViewBtn = document.getElementById('editor-view-btn');
+    const markdownViewBtn = document.getElementById('markdown-view-btn');
+    const htmlViewBtn = document.getElementById('html-view-btn');
+    const resultsContainer = document.getElementById('results-container');
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
+    const progressPercentage = document.getElementById('progress-percentage');
+    const resultsList = document.getElementById('results-list');
+    const helpBtn = document.getElementById('help-btn');
+    const helpModal = document.getElementById('help-modal');
+    const closeHelp = document.getElementById('close-help');
+    const closeHelpBtn = document.getElementById('close-help-btn');
+    const notification = document.getElementById('notification');
+    const notificationMessage = document.getElementById('notification-message');
+    const themeToggle = document.getElementById('theme-toggle');
+    const templateOptions = document.querySelectorAll('.template-option');
+    
+    // State
+    let uploadedFiles = [];
+    let currentPreviewFile = null;
+    let isDarkMode = false;
+    let isEditorMode = false;
+    let editorContent = '';
+    
+    // Initialize the application
+    function init() {
+      setupEventListeners();
+      convertBtn.disabled = true;
+    }
+    
+    // Setup event listeners
+    function setupEventListeners() {
+      // Dropzone events
+      dropzone.addEventListener('click', () => fileInput.click());
+      dropzone.addEventListener('dragover', handleDragOver);
+      dropzone.addEventListener('dragleave', handleDragLeave);
+      dropzone.addEventListener('drop', handleDrop);
+      
+      // File input change
+      fileInput.addEventListener('change', handleFileSelect);
+      
+      // View toggle buttons
+      editorViewBtn.addEventListener('click', () => switchPreview('editor'));
+      markdownViewBtn.addEventListener('click', () => switchPreview('markdown'));
+      htmlViewBtn.addEventListener('click', () => switchPreview('html'));
+      
+      // Editor content change
+      mdEditorTextarea.addEventListener('input', handleEditorInput);
+      
+      // Convert button
+      convertBtn.addEventListener('click', convertFiles);
+      
+      // Help modal
+      helpBtn.addEventListener('click', () => helpModal.classList.remove('hidden'));
+      closeHelp.addEventListener('click', () => helpModal.classList.add('hidden'));
+      closeHelpBtn.addEventListener('click', () => helpModal.classList.add('hidden'));
+      
+      // Theme toggle
+      themeToggle.addEventListener('click', toggleTheme);
+      
+      // Template selection
+      templateOptions.forEach(option => {
+        option.addEventListener('click', () => {
+          templateOptions.forEach(opt => opt.classList.remove('selected'));
+          option.classList.add('selected');
+        });
+      });
+    }
+    
+    // Handle drag over event
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.add('active');
+    }
+    
+    // Handle drag leave event
+    function handleDragLeave(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.remove('active');
+    }
+    
+    // Handle drop event
+    function handleDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.remove('active');
+      
+      if (e.dataTransfer.files.length) {
+        processFiles(e.dataTransfer.files);
+      }
+    }
+    
+    // Handle file selection
+    function handleFileSelect(e) {
+      if (e.target.files.length) {
+        processFiles(e.target.files);
+      }
+    }
+    
+    // Process uploaded files
+    function processFiles(files) {
+      // Convert FileList to array and filter for Markdown files
+      const markdownFiles = Array.from(files).filter(file => {
+        const ext = file.name.split('.').pop().toLowerCase();
+        return ['md', 'markdown', 'txt'].includes(ext);
+      });
+      
+      if (markdownFiles.length === 0) {
+        showNotification('Please select valid Markdown files (.md, .markdown, .txt)', 'error');
+        return;
+      }
+      
+      // Add files to the list
+      markdownFiles.forEach(file => {
+        // Check if file already exists
+        if (uploadedFiles.some(f => f.name === file.name && f.size === file.size)) {
+          return;
+        }
+        
+        uploadedFiles.push(file);
+        
+        // Create file item element
+        const fileItem = document.createElement('li');
+        fileItem.className = 'file-item flex items-center justify-between bg-gray-50 p-3 rounded-lg';
+        fileItem.innerHTML = `
+          <div class="flex items-center">
+            <i class="fa fa-file-text-o text-secondary mr-3"></i>
+            <div>
+              <p class="font-medium text-gray-800 truncate max-w-[200px]" title="${file.name}">${file.name}</p>
+              <p class="text-xs text-gray-500">${formatFileSize(file.size)}</p>
+            </div>
+          </div>
+          <div class="flex items-center">
+            <button class="preview-file-btn p-1 text-gray-500 hover:text-secondary transition-custom" data-index="${uploadedFiles.length - 1}">
+              <i class="fa fa-eye"></i>
+            </button>
+            <button class="remove-file-btn p-1 text-gray-500 hover:text-red-500 transition-custom ml-2" data-index="${uploadedFiles.length - 1}">
+              <i class="fa fa-trash"></i>
+            </button>
+          </div>
+        `;
+        
+        filesList.appendChild(fileItem);
+        
+        // Add event listeners to buttons
+        const previewBtn = fileItem.querySelector('.preview-file-btn');
+        const removeBtn = fileItem.querySelector('.remove-file-btn');
+        
+        previewBtn.addEventListener('click', () => previewFile(parseInt(previewBtn.dataset.index)));
+        removeBtn.addEventListener('click', () => removeFile(parseInt(removeBtn.dataset.index)));
+      });
+      
+      // Show files container
+      filesContainer.classList.remove('hidden');
+      
+      // Enable convert button if there are files
+      convertBtn.disabled = uploadedFiles.length === 0;
+      
+      // Preview the first file if none is currently selected
+      if (!currentPreviewFile && uploadedFiles.length > 0) {
+        previewFile(0);
+      }
+      
+      showNotification(`Successfully uploaded ${markdownFiles.length} file(s)`);
+    }
+    
+    // Preview a file
+    function previewFile(index) {
+      if (index < 0 || index >= uploadedFiles.length) return;
+      
+      const file = uploadedFiles[index];
+      currentPreviewFile = index;
+      
+      // Highlight the selected file
+      document.querySelectorAll('#files-list li').forEach((item, i) => {
+        if (i === index) {
+          item.classList.add('bg-light');
+        } else {
+          item.classList.remove('bg-light');
+        }
+      });
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const content = e.target.result;
+        
+        // Update Markdown preview
+        markdownPreview.innerHTML = `<pre class="whitespace-pre-wrap">${content}</pre>`;
+        
+        // Process MATLAB code blocks for formula conversion
+        const processedContent = processMatlabContent(content);
+        
+        // Update HTML preview
+        const htmlContent = md.render(processedContent);
+        htmlPreview.innerHTML = htmlContent;
+        
+        // Render math formulas with MathJax
+        if (window.MathJax) {
+          MathJax.typesetPromise([htmlPreview]).catch(console.error);
+        }
+        
+        // Switch to markdown view by default
+        switchPreview('markdown');
+      };
+      
+      reader.readAsText(file);
+    }
+    
+    // Remove a file
+    function removeFile(index) {
+      if (index < 0 || index >= uploadedFiles.length) return;
+      
+      // Remove from array
+      uploadedFiles.splice(index, 1);
+      
+      // Remove from DOM
+      filesList.removeChild(filesList.children[index]);
+      
+      // Update indices in remaining file items
+      Array.from(filesList.children).forEach((item, i) => {
+        const previewBtn = item.querySelector('.preview-file-btn');
+        const removeBtn = item.querySelector('.remove-file-btn');
+        previewBtn.dataset.index = i;
+        removeBtn.dataset.index = i;
+      });
+      
+      // Hide files container if no files left
+      if (uploadedFiles.length === 0) {
+        filesContainer.classList.add('hidden');
+        convertBtn.disabled = true;
+        
+        // Clear preview
+        markdownPreview.innerHTML = `
+          <div class="flex items-center justify-center h-full text-gray-500">
+            <div class="text-center">
+              <i class="fa fa-file-text-o text-4xl mb-3"></i>
+              <p>Upload a file to see preview</p>
+            </div>
+          </div>
+        `;
+        
+        htmlPreview.innerHTML = `
+          <div class="flex items-center justify-center h-full text-gray-500">
+            <div class="text-center">
+              <i class="fa fa-code text-4xl mb-3"></i>
+              <p>Upload a file to see HTML preview</p>
+            </div>
+          </div>
+        `;
+        
+        currentPreviewFile = null;
+      } else if (currentPreviewFile === index) {
+        // Preview the first file if the current preview was removed
+        previewFile(0);
+      } else if (currentPreviewFile > index) {
+        // Adjust current preview index if necessary
+        currentPreviewFile--;
+      }
+      
+      showNotification('File removed');
+    }
+    
+    // Switch preview between Editor, Markdown and HTML
+    function switchPreview(view) {
+      if (view === 'editor') {
+        // Show editor, hide others
+        markdownEditor.classList.remove('hidden');
+        markdownPreview.classList.add('hidden');
+        htmlPreview.classList.add('hidden');
+        
+        // Update button styles
+        editorViewBtn.classList.add('bg-light', 'text-secondary');
+        editorViewBtn.classList.remove('text-gray-600');
+        markdownViewBtn.classList.remove('bg-light', 'text-secondary');
+        markdownViewBtn.classList.add('text-gray-600');
+        htmlViewBtn.classList.remove('bg-light', 'text-secondary');
+        htmlViewBtn.classList.add('text-gray-600');
+        
+        isEditorMode = true;
+        convertBtn.disabled = false;
+      } else if (view === 'markdown') {
+        // Show markdown preview, hide others
+        markdownEditor.classList.add('hidden');
+        markdownPreview.classList.remove('hidden');
+        htmlPreview.classList.add('hidden');
+        
+        // Update button styles
+        editorViewBtn.classList.remove('bg-light', 'text-secondary');
+        editorViewBtn.classList.add('text-gray-600');
+        markdownViewBtn.classList.add('bg-light', 'text-secondary');
+        markdownViewBtn.classList.remove('text-gray-600');
+        htmlViewBtn.classList.remove('bg-light', 'text-secondary');
+        htmlViewBtn.classList.add('text-gray-600');
+        
+        isEditorMode = false;
+        
+        // Update markdown preview if in editor mode
+        if (editorContent) {
+          markdownPreview.innerHTML = `<pre class="whitespace-pre-wrap">${editorContent}</pre>`;
+        }
+      } else {
+        // Show HTML preview, hide others
+        markdownEditor.classList.add('hidden');
+        markdownPreview.classList.add('hidden');
+        htmlPreview.classList.remove('hidden');
+        
+        // Update button styles
+        editorViewBtn.classList.remove('bg-light', 'text-secondary');
+        editorViewBtn.classList.add('text-gray-600');
+        markdownViewBtn.classList.remove('bg-light', 'text-secondary');
+        markdownViewBtn.classList.add('text-gray-600');
+        htmlViewBtn.classList.add('bg-light', 'text-secondary');
+        htmlViewBtn.classList.remove('text-gray-600');
+        
+        isEditorMode = false;
+        
+        // Update HTML preview if in editor mode
+        if (editorContent) {
+          const htmlContent = md.render(editorContent);
+          htmlPreview.innerHTML = htmlContent;
+        }
+      }
+    }
+    
+    // Convert MATLAB code to LaTeX formula
+    function convertMatlabToLatex(matlabCode) {
+      // Simple conversion rules for common MATLAB syntax to LaTeX
+      let latex = matlabCode
+        // Replace MATLAB operators with LaTeX equivalents
+        .replace(/\^/g, '^')
+        .replace(/\*/g, ' \\cdot ')
+        .replace(/\//g, ' / ')
+        .replace(/\+/g, ' + ')
+        .replace(/-/g, ' - ')
+        
+        // Replace common MATLAB functions with LaTeX equivalents
+        .replace(/sin\(/g, '\\sin(')
+        .replace(/cos\(/g, '\\cos(')
+        .replace(/tan\(/g, '\\tan(')
+        .replace(/sqrt\(/g, '\\sqrt(')
+        .replace(/exp\(/g, 'e^{')
+        .replace(/\)/g, ')')
+        .replace(/log\(/g, '\\log(')
+        .replace(/abs\(/g, '|')
+        .replace(/\)/g, '|')
+        
+        // Replace MATLAB matrix notation with LaTeX matrix
+        .replace(/\[([^\]]+)\]/g, function(match, content) {
+          // Simple matrix conversion
+          let rows = content.split(';').map(row => 
+            row.trim().replace(/\s+/g, '&')
+          ).join('\\\\');
+          return '\\begin{pmatrix}' + rows + '\\end{pmatrix}';
+        })
+        
+        // Replace MATLAB variable names with LaTeX math mode
+        .replace(/([a-zA-Z_][a-zA-Z0-9_]*)/g, ' $1 ')
+        
+        // Clean up extra spaces
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      return latex;
+    }
+    
+    // Process content for MATLAB to LaTeX conversion
+    function processMatlabContent(content) {
+      // Look for MATLAB code blocks with a special comment indicating formula conversion
+      return content.replace(/```matlab\s*%.*?formula.*?\n([\s\S]*?)```/g, function(match, code) {
+        const latex = convertMatlabToLatex(code);
+        return `$$${latex}$$`;
+      });
+    }
+    
+    // Handle editor input
+    function handleEditorInput() {
+      editorContent = mdEditorTextarea.value;
+      
+      // Process MATLAB code blocks for formula conversion
+      const processedContent = processMatlabContent(editorContent);
+      
+      // Update previews if they are visible
+      if (!markdownPreview.classList.contains('hidden')) {
+        markdownPreview.innerHTML = `<pre class="whitespace-pre-wrap">${editorContent}</pre>`;
+      }
+      
+      if (!htmlPreview.classList.contains('hidden')) {
+        const htmlContent = md.render(processedContent);
+        htmlPreview.innerHTML = htmlContent;
+        
+        // Render math formulas with MathJax
+        if (window.MathJax) {
+          MathJax.typesetPromise([htmlPreview]).catch(console.error);
+        }
+      }
+      
+      // Enable convert button if there's content
+      convertBtn.disabled = !editorContent.trim() && uploadedFiles.length === 0;
+    }
+    
+    // Convert files to Word
+    function convertFiles() {
+      // Handle editor content conversion
+      if (isEditorMode && editorContent) {
+        // Show results container and progress
+        resultsContainer.classList.remove('hidden');
+        progressContainer.classList.remove('hidden');
+        
+        // Reset progress
+        progressBar.style.width = '0%';
+        progressPercentage.textContent = '0%';
+        
+        // Scroll to results
+        resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
+        // Clear previous results
+        resultsList.innerHTML = '';
+        
+        // Get selected template
+        const selectedTemplate = document.querySelector('.template-option.selected').textContent.trim().toLowerCase().includes('professional') ? 'professional' : 'standard';
+        
+        // Get format options
+        const includeToc = document.querySelectorAll('input[type="checkbox"]')[1].checked;
+        
+        // Simulate progress
+        let progress = 0;
+        const interval = setInterval(() => {
+          progress += 5;
+          progressBar.style.width = `${progress}%`;
+          progressPercentage.textContent = `${progress}%`;
+          
+          if (progress >= 100) {
+            clearInterval(interval);
+            
+            setTimeout(() => {
+              progressContainer.classList.add('hidden');
+            }, 500);
+          }
+        }, 100);
+        
+        // Convert editor content
+        setTimeout(() => {
+          try {
+            // Process MATLAB code blocks for formula conversion
+            const processedContent = processMatlabContent(editorContent);
+            const htmlContent = md.render(processedContent);
+            const styledHtml = createStyledHtml(htmlContent, selectedTemplate, includeToc);
+            const blob = htmlDocx.asBlob(styledHtml);
+            
+            // Create result item
+            const resultItem = document.createElement('div');
+            resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
+            resultItem.innerHTML = `
+              <div class="flex items-center">
+                <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                  <i class="fa fa-check text-green-500"></i>
+                </div>
+                <div>
+                  <p class="font-medium text-gray-800">document.docx</p>
+                  <p class="text-xs text-gray-500">${formatFileSize(blob.size)}</p>
+                </div>
+              </div>
+              <button class="download-btn bg-secondary hover:bg-primary text-white px-4 py-2 rounded-lg transition-custom">
+                <i class="fa fa-download mr-1"></i> Download
+              </button>
+            `;
+            
+            resultsList.appendChild(resultItem);
+            
+            // Add download event
+            const downloadBtn = resultItem.querySelector('.download-btn');
+            downloadBtn.addEventListener('click', () => {
+              saveAs(blob, 'document.docx');
+              showNotification('File downloaded successfully');
+            });
+            
+            showNotification('Conversion completed!');
+            
+          } catch (error) {
+            console.error('Conversion error:', error);
+            
+            // Create error result item
+            const resultItem = document.createElement('div');
+            resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
+            resultItem.innerHTML = `
+              <div class="flex items-center">
+                <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                  <i class="fa fa-times text-red-500"></i>
+                </div>
+                <div>
+                  <p class="font-medium text-gray-800">document.docx</p>
+                  <p class="text-xs text-red-500">Conversion failed</p>
+                </div>
+              </div>
+              <button class="retry-btn bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg transition-custom">
+                <i class="fa fa-refresh mr-1"></i> Retry
+              </button>
+            `;
+            
+            resultsList.appendChild(resultItem);
+            
+            // Add retry event
+            const retryBtn = resultItem.querySelector('.retry-btn');
+            retryBtn.addEventListener('click', () => {
+              // Remove this result
+              resultsList.removeChild(resultItem);
+              
+              // Re-process
+              convertFiles();
+            });
+          }
+        }, 2000);
+        
+        return;
+      }
+      
+      if (uploadedFiles.length === 0) return;
+      
+      // Show results container and progress
+      resultsContainer.classList.remove('hidden');
+      progressContainer.classList.remove('hidden');
+      
+      // Reset progress
+      progressBar.style.width = '0%';
+      progressPercentage.textContent = '0%';
+      
+      // Scroll to results
+      resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      
+      // Clear previous results
+      resultsList.innerHTML = '';
+      
+      // Get selected template
+      const selectedTemplate = document.querySelector('.template-option.selected').textContent.trim().toLowerCase().includes('professional') ? 'professional' : 'standard';
+      
+      // Get format options
+      const preserveFormatting = document.querySelector('input[type="checkbox"]').checked;
+      const includeToc = document.querySelectorAll('input[type="checkbox"]')[1].checked;
+      const embedImages = document.querySelectorAll('input[type="checkbox"]')[2].checked;
+      
+      // Process each file
+      let completed = 0;
+      
+      uploadedFiles.forEach((file, index) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+          const markdownContent = e.target.result;
+          
+          // Process MATLAB code blocks for formula conversion
+          const processedContent = processMatlabContent(markdownContent);
+          const htmlContent = md.render(processedContent);
+          
+          // Create styled HTML for Word conversion
+          const styledHtml = createStyledHtml(htmlContent, selectedTemplate, includeToc);
+          
+          // Convert HTML to Word
+          setTimeout(() => {
+            try {
+              const blob = htmlDocx.asBlob(styledHtml);
+              
+              // Create result item
+              const resultItem = document.createElement('div');
+              resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
+              resultItem.innerHTML = `
+                <div class="flex items-center">
+                  <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                    <i class="fa fa-check text-green-500"></i>
+                  </div>
+                  <div>
+                    <p class="font-medium text-gray-800">${file.name.replace(/\.[^/.]+$/, '')}.docx</p>
+                    <p class="text-xs text-gray-500">${formatFileSize(blob.size)}</p>
+                  </div>
+                </div>
+                <button class="download-btn bg-secondary hover:bg-primary text-white px-4 py-2 rounded-lg transition-custom">
+                  <i class="fa fa-download mr-1"></i> Download
+                </button>
+              `;
+              
+              resultsList.appendChild(resultItem);
+              
+              // Add download event
+              const downloadBtn = resultItem.querySelector('.download-btn');
+              downloadBtn.addEventListener('click', () => {
+                saveAs(blob, `${file.name.replace(/\.[^/.]+$/, '')}.docx`);
+                showNotification('File downloaded successfully');
+              });
+              
+            } catch (error) {
+              console.error('Conversion error:', error);
+              
+              // Create error result item
+              const resultItem = document.createElement('div');
+              resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
+              resultItem.innerHTML = `
+                <div class="flex items-center">
+                  <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                    <i class="fa fa-times text-red-500"></i>
+                  </div>
+                  <div>
+                    <p class="font-medium text-gray-800">${file.name}</p>
+                    <p class="text-xs text-red-500">Conversion failed</p>
+                  </div>
+                </div>
+                <button class="retry-btn bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg transition-custom">
+                  <i class="fa fa-refresh mr-1"></i> Retry
+                </button>
+              `;
+              
+              resultsList.appendChild(resultItem);
+              
+              // Add retry event
+              const retryBtn = resultItem.querySelector('.retry-btn');
+              retryBtn.addEventListener('click', () => {
+                // Remove this result
+                resultsList.removeChild(resultItem);
+                
+                // Re-process this file
+                processSingleFile(file);
+              });
+            }
+            
+            // Update progress
+            completed++;
+            const progress = Math.round((completed / uploadedFiles.length) * 100);
+            progressBar.style.width = `${progress}%`;
+            progressPercentage.textContent = `${progress}%`;
+            
+            // Hide progress when done
+            if (completed === uploadedFiles.length) {
+              setTimeout(() => {
+                progressContainer.classList.add('hidden');
+              }, 500);
+              
+              showNotification('Conversion completed!');
+            }
+          }, index * 500); // Stagger conversions
+        };
+        
+        reader.readAsText(file);
+      });
+    }
+    
+    // Process a single file for conversion
+    function processSingleFile(file) {
+      const reader = new FileReader();
+      
+      reader.onload = function(e) {
+        const markdownContent = e.target.result;
+        
+        // Process MATLAB code blocks for formula conversion
+        const processedContent = processMatlabContent(markdownContent);
+        const htmlContent = md.render(processedContent);
+        
+        // Get selected template
+        const selectedTemplate = document.querySelector('.template-option.selected').textContent.trim().toLowerCase().includes('professional') ? 'professional' : 'standard';
+        
+        // Get format options
+        const includeToc = document.querySelectorAll('input[type="checkbox"]')[1].checked;
+        
+        // Create styled HTML for Word conversion
+        const styledHtml = createStyledHtml(htmlContent, selectedTemplate, includeToc);
+        
+        try {
+          const blob = htmlDocx.asBlob(styledHtml);
+          
+          // Create result item
+          const resultItem = document.createElement('div');
+          resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
+          resultItem.innerHTML = `
+            <div class="flex items-center">
+              <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                <i class="fa fa-check text-green-500"></i>
+              </div>
+              <div>
+                <p class="font-medium text-gray-800">${file.name.replace(/\.[^/.]+$/, '')}.docx</p>
+                <p class="text-xs text-gray-500">${formatFileSize(blob.size)}</p>
+              </div>
+            </div>
+            <button class="download-btn bg-secondary hover:bg-primary text-white px-4 py-2 rounded-lg transition-custom">
+              <i class="fa fa-download mr-1"></i> Download
+            </button>
+          `;
+          
+          resultsList.appendChild(resultItem);
+          
+          // Add download event
+          const downloadBtn = resultItem.querySelector('.download-btn');
+          downloadBtn.addEventListener('click', () => {
+            saveAs(blob, `${file.name.replace(/\.[^/.]+$/, '')}.docx`);
+            showNotification('File downloaded successfully');
+          });
+          
+        } catch (error) {
+          console.error('Conversion error:', error);
+          
+          // Create error result item
+          const resultItem = document.createElement('div');
+          resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
+          resultItem.innerHTML = `
+            <div class="flex items-center">
+              <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                <i class="fa fa-times text-red-500"></i>
+              </div>
+              <div>
+                <p class="font-medium text-gray-800">${file.name}</p>
+                <p class="text-xs text-red-500">Conversion failed</p>
+              </div>
+            </div>
+            <button class="retry-btn bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg transition-custom">
+              <i class="fa fa-refresh mr-1"></i> Retry
+            </button>
+          `;
+          
+          resultsList.appendChild(resultItem);
+          
+          // Add retry event
+          const retryBtn = resultItem.querySelector('.retry-btn');
+          retryBtn.addEventListener('click', () => {
+            // Remove this result
+            resultsList.removeChild(resultItem);
+            
+            // Re-process this file
+            processSingleFile(file);
+          });
+        }
+      };
+      
+      reader.readAsText(file);
+    }
+    
+    // Create styled HTML for Word conversion
+    function createStyledHtml(htmlContent, template, includeToc) {
+      // Template styles
+      let styles = '';
+      
+      if (template === 'standard') {
+        styles = `
+          body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+          }
+          h1, h2, h3, h4, h5, h6 {
+            color: #1e40af;
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+            line-height: 1.25;
+          }
+          h1 {
+            font-size: 2em;
+            border-bottom: 1px solid #eaecef;
+            padding-bottom: 0.3em;
+          }
+          h2 {
+            font-size: 1.5em;
+            border-bottom: 1px solid #eaecef;
+            padding-bottom: 0.3em;
+          }
+          p {
+            margin-top: 0;
+            margin-bottom: 16px;
+          }
+          a {
+            color: #0366d6;
+            text-decoration: none;
+          }
+          a:hover {
+            text-decoration: underline;
+          }
+          ul, ol {
+            padding-left: 2em;
+            margin-top: 0;
+            margin-bottom: 16px;
+          }
+          li {
+            margin-bottom: 0.25em;
+          }
+          blockquote {
+            padding: 0 1em;
+            color: #6a737d;
+            border-left: 0.25em solid #dfe2e5;
+            margin: 0 0 16px 0;
+          }
+          pre {
+            background-color: #f6f8fa;
+            border-radius: 3px;
+            padding: 16px;
+            overflow: auto;
+            font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace;
+            font-size: 85%;
+            line-height: 1.45;
+            margin-bottom: 16px;
+          }
+          code {
+            font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace;
+            font-size: 85%;
+            padding: 0.2em 0.4em;
+            margin: 0;
+            background-color: rgba(27, 31, 35, 0.05);
+            border-radius: 3px;
+          }
+          pre code {
+            background-color: transparent;
+            padding: 0;
+            margin: 0;
+          }
+          table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 16px;
+          }
+          table th, table td {
+            padding: 6px 13px;
+            border: 1px solid #dfe2e5;
+          }
+          table tr {
+            background-color: #fff;
+            border-top: 1px solid #c6cbd1;
+          }
+          table tr:nth-child(2n) {
+            background-color: #f6f8fa;
+          }
+          img {
+            max-width: 100%;
+            box-sizing: content-box;
+            background-color: #fff;
+          }
+        `;
+      } else {
+        // Professional template
+        styles = `
+          body {
+            font-family: "Times New Roman", serif;
+            line-height: 1.8;
+            color: #000;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 2cm;
+            background-color: #fff;
+          }
+          h1, h2, h3, h4, h5, h6 {
+            color: #000;
+            margin-top: 30px;
+            margin-bottom: 20px;
+            font-weight: bold;
+            line-height: 1.3;
+          }
+          h1 {
+            font-size: 2.2em;
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #000;
+            padding-bottom: 10px;
+          }
+          h2 {
+            font-size: 1.8em;
+            border-bottom: 2px solid #000;
+            padding-bottom: 8px;
+          }
+          h3 {
+            font-size: 1.5em;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+          }
+          p {
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: justify;
+            text-indent: 2em;
+          }
+          a {
+            color: #0000ff;
+            text-decoration: none;
+          }
+          a:hover {
+            text-decoration: underline;
+          }
+          ul, ol {
+            padding-left: 2em;
+            margin-top: 0;
+            margin-bottom: 20px;
+          }
+          li {
+            margin-bottom: 8px;
+            text-align: justify;
+          }
+          blockquote {
+            padding: 15px 20px;
+            color: #333;
+            border-left: 4px solid #666;
+            margin: 20px 0;
+            background-color: #f9f9f9;
+            font-style: italic;
+          }
+          pre {
+            background-color: #f5f5f5;
+            border-radius: 5px;
+            padding: 15px;
+            overflow: auto;
+            font-family: "Courier New", monospace;
+            font-size: 90%;
+            line-height: 1.5;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+          }
+          code {
+            font-family: "Courier New", monospace;
+            font-size: 90%;
+            padding: 2px 5px;
+            margin: 0;
+            background-color: #f5f5f5;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+          }
+          pre code {
+            background-color: transparent;
+            padding: 0;
+            margin: 0;
+            border: none;
+          }
+          table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 20px;
+            border: 1px solid #000;
+          }
+          table th, table td {
+            padding: 10px 15px;
+            border: 1px solid #000;
+            text-align: left;
+          }
+          table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+          }
+          table tr:nth-child(2n) {
+            background-color: #f9f9f9;
+          }
+          img {
+            max-width: 100%;
+            box-sizing: content-box;
+            background-color: #fff;
+            display: block;
+            margin: 20px auto;
+          }
+          .toc {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin-bottom: 30px;
+          }
+          .toc h2 {
+            text-align: center;
+            border-bottom: none;
+            margin-top: 0;
+          }
+          .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+          }
+          .toc li {
+            margin-bottom: 5px;
+          }
+          .toc a {
+            color: #000;
+            text-decoration: none;
+          }
+          .toc a:hover {
+            text-decoration: underline;
+          }
+          .toc-h2 {
+            font-weight: bold;
+          }
+          .toc-h3 {
+            padding-left: 20px;
+            font-size: 0.95em;
+          }
+        `;
+      }
+      
+      // Generate table of contents if enabled
+      let toc = '';
+      if (includeToc && template === 'professional') {
+        // Extract headings from HTML
+        const headingRegex = /<h([23])([^>]*)>(.*?)<\/h[23]>/g;
+        let match;
+        let tocItems = [];
+        
+        while ((match = headingRegex.exec(htmlContent)) !== null) {
+          const level = match[1];
+          const attributes = match[2];
+          const text = match[3].replace(/<[^>]*>/g, '');
+          const id = attributes.match(/id="([^"]*)"/) ? attributes.match(/id="([^"]*)"/)[1] : text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          
+          tocItems.push({
+            level,
+            text,
+            id
+          });
+        }
+        
+        if (tocItems.length > 0) {
+          toc = `
+            <div class="toc">
+              <h2>Table of Contents</h2>
+              <ul>
+          `;
+          
+          tocItems.forEach(item => {
+            const indent = item.level === '3' ? 'toc-h3' : 'toc-h2';
+            toc += `
+              <li class="${indent}">
+                <a href="#${item.id}">${item.text}</a>
+              </li>
+            `;
+          });
+          
+          toc += `
+              </ul>
+            </div>
+          `;
+        }
+      }
+      
+      // Return complete HTML
+      return `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Document</title>
+          <style>
+            ${styles}
+          </style>
+        </head>
+        <body>
+          ${toc}
+          ${htmlContent}
+        </body>
+        </html>
+      `;
+    }
+    
+    // Toggle dark/light theme
+    function toggleTheme() {
+      isDarkMode = !isDarkMode;
+      
+      if (isDarkMode) {
+        document.body.classList.add('dark');
+        themeToggle.innerHTML = '<i class="fa fa-sun-o"></i>';
+        
+        // Add dark mode styles
+        const style = document.createElement('style');
+        style.id = 'dark-mode-styles';
+        style.textContent = `
+          .dark {
+            background-color: #1f2937;
+            color: #f9fafb;
+          }
+          .dark .bg-white {
+            background-color: #374151;
+          }
+          .dark .text-gray-800 {
+            color: #f9fafb;
+          }
+          .dark .text-gray-700 {
+            color: #e5e7eb;
+          }
+          .dark .text-gray-600 {
+            color: #d1d5db;
+          }
+          .dark .text-gray-500 {
+            color: #9ca3af;
+          }
+          .dark .border-gray-200 {
+            border-color: #4b5563;
+          }
+          .dark .border-gray-300 {
+            border-color: #4b5563;
+          }
+          .dark .bg-gray-50 {
+            background-color: #2d3748;
+          }
+          .dark .bg-light {
+            background-color: #2563eb;
+          }
+          .dark .bg-gray-200 {
+            background-color: #4b5563;
+          }
+          .dark .text-secondary {
+            color: #93c5fd;
+          }
+          .dark pre {
+            background-color: #1f2937;
+            color: #f9fafb;
+          }
+          .dark code {
+            background-color: #374151;
+            color: #f9fafb;
+          }
+          .dark table tr {
+            background-color: #374151;
+          }
+          .dark table tr:nth-child(2n) {
+            background-color: #4b5563;
+          }
+          .dark blockquote {
+            color: #d1d5db;
+            border-left-color: #4b5563;
+            background-color: #2d3748;
+          }
+        `;
+        
+        document.head.appendChild(style);
+      } else {
+        document.body.classList.remove('dark');
+        themeToggle.innerHTML = '<i class="fa fa-moon-o"></i>';
+        
+        // Remove dark mode styles
+        const darkStyles = document.getElementById('dark-mode-styles');
+        if (darkStyles) {
+          darkStyles.remove();
+        }
+      }
+    }
+    
+    // Show notification
+    function showNotification(message, type = 'success') {
+      notificationMessage.textContent = message;
+      
+      if (type === 'error') {
+        notification.classList.remove('bg-green-500');
+        notification.classList.add('bg-red-500');
+      } else {
+        notification.classList.remove('bg-red-500');
+        notification.classList.add('bg-green-500');
+      }
+      
+      notification.classList.remove('translate-y-20', 'opacity-0');
+      
+      setTimeout(() => {
+        notification.classList.add('translate-y-20', 'opacity-0');
+      }, 3000);
+    }
+    
+    // Format file size
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    // Initialize the application when DOM is loaded
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
