@@ -87,6 +87,19 @@
     .progress-bar {
       transition: width 0.3s ease;
     }
+    
+    /* 新增样式：区分文件类型 */
+    .file-item.folder {
+      border-left: 3px solid #f59e0b;
+    }
+    
+    .file-item.markdown {
+      border-left: 3px solid #3b82f6;
+    }
+    
+    .file-item.image {
+      border-left: 3px solid #10b981;
+    }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -120,12 +133,18 @@
           <div id="dropzone" class="dropzone border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-secondary transition-custom">
             <div class="flex flex-col items-center justify-center">
               <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-4"></i>
-              <p class="text-gray-600 mb-2">Drag & drop your Markdown files here</p>
+              <p class="text-gray-600 mb-2">Drag & drop your Markdown files or folders here</p>
               <p class="text-gray-500 text-sm mb-4">or</p>
-              <label class="btn bg-secondary hover:bg-primary text-white px-6 py-2 rounded-lg cursor-pointer">
-                <span>Choose Files</span>
-                <input type="file" id="file-input" class="hidden" accept=".md,.markdown,.txt" multiple>
-              </label>
+              <div class="flex flex-col sm:flex-row gap-3">
+                <label class="btn bg-secondary hover:bg-primary text-white px-6 py-2 rounded-lg cursor-pointer">
+                  <span>Choose Files</span>
+                  <input type="file" id="file-input" class="hidden" accept=".md,.markdown,.txt" multiple>
+                </label>
+                <label class="btn bg-accent hover:bg-secondary text-white px-6 py-2 rounded-lg cursor-pointer">
+                  <span>Choose Folder</span>
+                  <input type="file" id="folder-input" class="hidden" webkitdirectory directory multiple>
+                </label>
+              </div>
             </div>
           </div>
           
@@ -182,7 +201,7 @@
                 <span class="ml-2 text-gray-700">Include table of contents</span>
               </label>
               <label class="flex items-center">
-                <input type="checkbox" class="form-checkbox h-5 w-5 text-secondary">
+                <input type="checkbox" class="form-checkbox h-5 w-5 text-secondary" checked>
                 <span class="ml-2 text-gray-700">Embed images</span>
               </label>
             </div>
@@ -299,8 +318,9 @@
       </div>
       <div class="space-y-4">
         <div>
-          <h3 class="text-lg font-semibold text-gray-700">1. Upload Your Files</h3>
-          <p class="text-gray-600">Drag and drop your Markdown files into the upload area or click "Choose Files" to browse from your computer.</p>
+          <h3 class="text-lg font-semibold text-gray-700">1. Upload Your Files or Folders</h3>
+          <p class="text-gray-600">Drag and drop your Markdown files or entire folders into the upload area. You can also click "Choose Files" or "Choose Folder" to browse from your computer.</p>
+          <p class="text-gray-600 mt-1">For files with images, it's best to upload the entire folder containing both the Markdown files and images.</p>
         </div>
         <div>
           <h3 class="text-lg font-semibold text-gray-700">2. Configure Conversion Options</h3>
@@ -373,6 +393,7 @@
     // DOM Elements
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('file-input');
+    const folderInput = document.getElementById('folder-input'); // 新增文件夹输入元素
     const filesContainer = document.getElementById('files-container');
     const filesList = document.getElementById('files-list');
     const convertBtn = document.getElementById('convert-btn');
@@ -403,6 +424,7 @@
     let isDarkMode = false;
     let isEditorMode = false;
     let editorContent = '';
+    let fileMap = new Map(); // 新增：存储所有文件的映射表，用于处理图片
     
     // Initialize the application
     function init() {
@@ -419,7 +441,10 @@
       dropzone.addEventListener('drop', handleDrop);
       
       // File input change
-      fileInput.addEventListener('change', handleFileSelect);
+      fileInput.addEventListener('change', (e) => handleFileSelect(e, false));
+      
+      // 新增：文件夹输入事件
+      folderInput.addEventListener('change', (e) => handleFileSelect(e, true));
       
       // View toggle buttons
       editorViewBtn.addEventListener('click', () => switchPreview('editor'));
@@ -470,47 +495,77 @@
       dropzone.classList.remove('active');
       
       if (e.dataTransfer.files.length) {
-        processFiles(e.dataTransfer.files);
+        // 检查是否是文件夹
+        const isFolder = e.dataTransfer.files[0].webkitRelativePath !== '';
+        processFiles(e.dataTransfer.files, isFolder);
       }
     }
     
-    // Handle file selection
-    function handleFileSelect(e) {
+    // Handle file selection (支持文件和文件夹)
+    function handleFileSelect(e, isFolder) {
       if (e.target.files.length) {
-        processFiles(e.target.files);
+        processFiles(e.target.files, isFolder);
       }
     }
     
-    // Process uploaded files
-    function processFiles(files) {
-      // Convert FileList to array and filter for Markdown files
-      const markdownFiles = Array.from(files).filter(file => {
-        const ext = file.name.split('.').pop().toLowerCase();
-        return ['md', 'markdown', 'txt'].includes(ext);
+    // 辅助函数：判断是否为Markdown文件
+    function isMarkdownFile(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      return ['md', 'markdown', 'txt'].includes(ext);
+    }
+    
+    // 辅助函数：判断是否为图片文件
+    function isImageFile(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg'].includes(ext);
+    }
+    
+    // 辅助函数：标准化文件路径
+    function normalizePath(path) {
+      // 处理不同操作系统的路径分隔符
+      return path.replace(/[\\/]/g, '/').toLowerCase();
+    }
+    
+    // Process uploaded files (修改为支持文件夹)
+    function processFiles(files, isFolder = false) {
+      // 重置文件映射
+      fileMap = new Map();
+      
+      // 首先收集所有文件信息
+      Array.from(files).forEach(file => {
+        // 对于文件夹上传，使用相对路径作为键
+        const key = isFolder ? file.webkitRelativePath : file.name;
+        fileMap.set(key, file);
       });
+      
+      // 筛选Markdown文件
+      const markdownFiles = Array.from(files).filter(file => isMarkdownFile(file));
       
       if (markdownFiles.length === 0) {
         showNotification('Please select valid Markdown files (.md, .markdown, .txt)', 'error');
         return;
       }
       
-      // Add files to the list
+      // 添加Markdown文件到列表
       markdownFiles.forEach(file => {
-        // Check if file already exists
+        // 检查文件是否已存在
         if (uploadedFiles.some(f => f.name === file.name && f.size === file.size)) {
           return;
         }
         
         uploadedFiles.push(file);
         
-        // Create file item element
+        // 创建文件项元素
         const fileItem = document.createElement('li');
-        fileItem.className = 'file-item flex items-center justify-between bg-gray-50 p-3 rounded-lg';
+        const path = isFolder ? file.webkitRelativePath : file.name;
+        const displayName = path.split('/').pop();
+        
+        fileItem.className = 'file-item markdown flex items-center justify-between bg-gray-50 p-3 rounded-lg';
         fileItem.innerHTML = `
           <div class="flex items-center">
             <i class="fa fa-file-text-o text-secondary mr-3"></i>
             <div>
-              <p class="font-medium text-gray-800 truncate max-w-[200px]" title="${file.name}">${file.name}</p>
+              <p class="font-medium text-gray-800 truncate max-w-[200px]" title="${path}">${displayName}</p>
               <p class="text-xs text-gray-500">${formatFileSize(file.size)}</p>
             </div>
           </div>
@@ -526,36 +581,36 @@
         
         filesList.appendChild(fileItem);
         
-        // Add event listeners to buttons
+        // 为按钮添加事件监听
         const previewBtn = fileItem.querySelector('.preview-file-btn');
         const removeBtn = fileItem.querySelector('.remove-file-btn');
         
-        previewBtn.addEventListener('click', () => previewFile(parseInt(previewBtn.dataset.index)));
+        previewBtn.addEventListener('click', () => previewFile(parseInt(previewBtn.dataset.index), isFolder));
         removeBtn.addEventListener('click', () => removeFile(parseInt(removeBtn.dataset.index)));
       });
       
-      // Show files container
+      // 显示文件容器
       filesContainer.classList.remove('hidden');
       
-      // Enable convert button if there are files
+      // 如果有文件则启用转换按钮
       convertBtn.disabled = uploadedFiles.length === 0;
       
-      // Preview the first file if none is currently selected
+      // 如果当前没有预览文件且有上传的文件，则预览第一个文件
       if (!currentPreviewFile && uploadedFiles.length > 0) {
-        previewFile(0);
+        previewFile(0, isFolder);
       }
       
       showNotification(`Successfully uploaded ${markdownFiles.length} file(s)`);
     }
     
-    // Preview a file
-    function previewFile(index) {
+    // Preview a file (修改为支持图片处理)
+    function previewFile(index, isFolder = false) {
       if (index < 0 || index >= uploadedFiles.length) return;
       
       const file = uploadedFiles[index];
       currentPreviewFile = index;
       
-      // Highlight the selected file
+      // 高亮选中的文件
       document.querySelectorAll('#files-list li').forEach((item, i) => {
         if (i === index) {
           item.classList.add('bg-light');
@@ -566,24 +621,54 @@
       
       const reader = new FileReader();
       reader.onload = function(e) {
-        const content = e.target.result;
+        let content = e.target.result;
+        editorContent = content;
+        mdEditorTextarea.value = content;
         
-        // Update Markdown preview
+        // 处理图片路径
+        if (isFolder && fileMap.size > 0) {
+          // 正则匹配Markdown图片语法: ![alt](path)
+          content = content.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, path) => {
+            const normalizedPath = normalizePath(path);
+            
+            // 在fileMap中查找匹配的图片文件
+            for (const key of fileMap.keys()) {
+              if (key.endsWith(normalizedPath) || normalizePath(key) === normalizedPath) {
+                const imageFile = fileMap.get(key);
+                const imageReader = new FileReader();
+                
+                imageReader.onload = function(imgEvent) {
+                  // 更新预览内容中的图片路径为dataURL
+                  const updatedContent = mdEditorTextarea.value.replace(path, imgEvent.target.result);
+                  mdEditorTextarea.value = updatedContent;
+                  handleEditorInput();
+                };
+                
+                imageReader.readAsDataURL(imageFile);
+                return match; // 临时返回原匹配，稍后会更新
+              }
+            }
+            
+            return match; // 未找到图片则保持原样
+          });
+        }
+        
+        // 更新Markdown预览
         markdownPreview.innerHTML = `<pre class="whitespace-pre-wrap">${content}</pre>`;
         
-        // Process MATLAB code blocks for formula conversion
+        // 处理MATLAB代码块的公式转换
         const processedContent = processMatlabContent(content);
         
-        // Update HTML preview
+        // 更新HTML预览
         const htmlContent = md.render(processedContent);
         htmlPreview.innerHTML = htmlContent;
         
-        // Render math formulas with MathJax
+        // 使用MathJax渲染数学公式
         if (window.MathJax) {
           MathJax.typesetPromise([htmlPreview]).catch(console.error);
         }
         
-        // Switch to markdown view by default
+        // 默认切换到markdown视图
         switchPreview('markdown');
       };
       
@@ -594,13 +679,13 @@
     function removeFile(index) {
       if (index < 0 || index >= uploadedFiles.length) return;
       
-      // Remove from array
+      // 从数组中移除
       uploadedFiles.splice(index, 1);
       
-      // Remove from DOM
+      // 从DOM中移除
       filesList.removeChild(filesList.children[index]);
       
-      // Update indices in remaining file items
+      // 更新剩余文件项的索引
       Array.from(filesList.children).forEach((item, i) => {
         const previewBtn = item.querySelector('.preview-file-btn');
         const removeBtn = item.querySelector('.remove-file-btn');
@@ -608,12 +693,12 @@
         removeBtn.dataset.index = i;
       });
       
-      // Hide files container if no files left
+      // 如果没有文件了，隐藏文件容器
       if (uploadedFiles.length === 0) {
         filesContainer.classList.add('hidden');
         convertBtn.disabled = true;
         
-        // Clear preview
+        // 清空预览
         markdownPreview.innerHTML = `
           <div class="flex items-center justify-center h-full text-gray-500">
             <div class="text-center">
@@ -633,11 +718,12 @@
         `;
         
         currentPreviewFile = null;
+        fileMap.clear(); // 清空文件映射
       } else if (currentPreviewFile === index) {
-        // Preview the first file if the current preview was removed
+        // 如果当前预览的文件被删除，预览第一个文件
         previewFile(0);
       } else if (currentPreviewFile > index) {
-        // Adjust current preview index if necessary
+        // 必要时调整当前预览索引
         currentPreviewFile--;
       }
       
@@ -647,12 +733,12 @@
     // Switch preview between Editor, Markdown and HTML
     function switchPreview(view) {
       if (view === 'editor') {
-        // Show editor, hide others
+        // 显示编辑器，隐藏其他
         markdownEditor.classList.remove('hidden');
         markdownPreview.classList.add('hidden');
         htmlPreview.classList.add('hidden');
         
-        // Update button styles
+        // 更新按钮样式
         editorViewBtn.classList.add('bg-light', 'text-secondary');
         editorViewBtn.classList.remove('text-gray-600');
         markdownViewBtn.classList.remove('bg-light', 'text-secondary');
@@ -663,12 +749,12 @@
         isEditorMode = true;
         convertBtn.disabled = false;
       } else if (view === 'markdown') {
-        // Show markdown preview, hide others
+        // 显示markdown预览，隐藏其他
         markdownEditor.classList.add('hidden');
         markdownPreview.classList.remove('hidden');
         htmlPreview.classList.add('hidden');
         
-        // Update button styles
+        // 更新按钮样式
         editorViewBtn.classList.remove('bg-light', 'text-secondary');
         editorViewBtn.classList.add('text-gray-600');
         markdownViewBtn.classList.add('bg-light', 'text-secondary');
@@ -678,17 +764,17 @@
         
         isEditorMode = false;
         
-        // Update markdown preview if in editor mode
+        // 如果在编辑模式，更新markdown预览
         if (editorContent) {
           markdownPreview.innerHTML = `<pre class="whitespace-pre-wrap">${editorContent}</pre>`;
         }
       } else {
-        // Show HTML preview, hide others
+        // 显示HTML预览，隐藏其他
         markdownEditor.classList.add('hidden');
         markdownPreview.classList.add('hidden');
         htmlPreview.classList.remove('hidden');
         
-        // Update button styles
+        // 更新按钮样式
         editorViewBtn.classList.remove('bg-light', 'text-secondary');
         editorViewBtn.classList.add('text-gray-600');
         markdownViewBtn.classList.remove('bg-light', 'text-secondary');
@@ -698,7 +784,7 @@
         
         isEditorMode = false;
         
-        // Update HTML preview if in editor mode
+        // 如果在编辑模式，更新HTML预览
         if (editorContent) {
           const htmlContent = md.render(editorContent);
           htmlPreview.innerHTML = htmlContent;
@@ -763,7 +849,7 @@
       // Process MATLAB code blocks for formula conversion
       const processedContent = processMatlabContent(editorContent);
       
-      // Update previews if they are visible
+      // 如果预览可见则更新
       if (!markdownPreview.classList.contains('hidden')) {
         markdownPreview.innerHTML = `<pre class="whitespace-pre-wrap">${editorContent}</pre>`;
       }
@@ -772,41 +858,41 @@
         const htmlContent = md.render(processedContent);
         htmlPreview.innerHTML = htmlContent;
         
-        // Render math formulas with MathJax
+        // 使用MathJax渲染数学公式
         if (window.MathJax) {
           MathJax.typesetPromise([htmlPreview]).catch(console.error);
         }
       }
       
-      // Enable convert button if there's content
+      // 如果有内容则启用转换按钮
       convertBtn.disabled = !editorContent.trim() && uploadedFiles.length === 0;
     }
     
-    // Convert files to Word
-    function convertFiles() {
-      // Handle editor content conversion
+    // Convert files to Word (修改为支持图片嵌入)
+    async function convertFiles() {
+      // 处理编辑器内容转换
       if (isEditorMode && editorContent) {
-        // Show results container and progress
+        // 显示结果容器和进度条
         resultsContainer.classList.remove('hidden');
         progressContainer.classList.remove('hidden');
         
-        // Reset progress
+        // 重置进度
         progressBar.style.width = '0%';
         progressPercentage.textContent = '0%';
         
-        // Scroll to results
+        // 滚动到结果区域
         resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
         
-        // Clear previous results
+        // 清除之前的结果
         resultsList.innerHTML = '';
         
-        // Get selected template
+        // 获取选中的模板
         const selectedTemplate = document.querySelector('.template-option.selected').textContent.trim().toLowerCase().includes('professional') ? 'professional' : 'standard';
         
-        // Get format options
+        // 获取格式选项
         const includeToc = document.querySelectorAll('input[type="checkbox"]')[1].checked;
         
-        // Simulate progress
+        // 模拟进度
         let progress = 0;
         const interval = setInterval(() => {
           progress += 5;
@@ -822,233 +908,51 @@
           }
         }, 100);
         
-        // Convert editor content
-        setTimeout(() => {
-          try {
-            // Process MATLAB code blocks for formula conversion
-            const processedContent = processMatlabContent(editorContent);
-            const htmlContent = md.render(processedContent);
-            const styledHtml = createStyledHtml(htmlContent, selectedTemplate, includeToc);
-            const blob = htmlDocx.asBlob(styledHtml);
-            
-            // Create result item
-            const resultItem = document.createElement('div');
-            resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
-            resultItem.innerHTML = `
-              <div class="flex items-center">
-                <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                  <i class="fa fa-check text-green-500"></i>
-                </div>
-                <div>
-                  <p class="font-medium text-gray-800">document.docx</p>
-                  <p class="text-xs text-gray-500">${formatFileSize(blob.size)}</p>
-                </div>
-              </div>
-              <button class="download-btn bg-secondary hover:bg-primary text-white px-4 py-2 rounded-lg transition-custom">
-                <i class="fa fa-download mr-1"></i> Download
-              </button>
-            `;
-            
-            resultsList.appendChild(resultItem);
-            
-            // Add download event
-            const downloadBtn = resultItem.querySelector('.download-btn');
-            downloadBtn.addEventListener('click', () => {
-              saveAs(blob, 'document.docx');
-              showNotification('File downloaded successfully');
-            });
-            
-            showNotification('Conversion completed!');
-            
-          } catch (error) {
-            console.error('Conversion error:', error);
-            
-            // Create error result item
-            const resultItem = document.createElement('div');
-            resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
-            resultItem.innerHTML = `
-              <div class="flex items-center">
-                <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                  <i class="fa fa-times text-red-500"></i>
-                </div>
-                <div>
-                  <p class="font-medium text-gray-800">document.docx</p>
-                  <p class="text-xs text-red-500">Conversion failed</p>
-                </div>
-              </div>
-              <button class="retry-btn bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg transition-custom">
-                <i class="fa fa-refresh mr-1"></i> Retry
-              </button>
-            `;
-            
-            resultsList.appendChild(resultItem);
-            
-            // Add retry event
-            const retryBtn = resultItem.querySelector('.retry-btn');
-            retryBtn.addEventListener('click', () => {
-              // Remove this result
-              resultsList.removeChild(resultItem);
-              
-              // Re-process
-              convertFiles();
-            });
-          }
-        }, 2000);
-        
-        return;
-      }
-      
-      if (uploadedFiles.length === 0) return;
-      
-      // Show results container and progress
-      resultsContainer.classList.remove('hidden');
-      progressContainer.classList.remove('hidden');
-      
-      // Reset progress
-      progressBar.style.width = '0%';
-      progressPercentage.textContent = '0%';
-      
-      // Scroll to results
-      resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      
-      // Clear previous results
-      resultsList.innerHTML = '';
-      
-      // Get selected template
-      const selectedTemplate = document.querySelector('.template-option.selected').textContent.trim().toLowerCase().includes('professional') ? 'professional' : 'standard';
-      
-      // Get format options
-      const preserveFormatting = document.querySelector('input[type="checkbox"]').checked;
-      const includeToc = document.querySelectorAll('input[type="checkbox"]')[1].checked;
-      const embedImages = document.querySelectorAll('input[type="checkbox"]')[2].checked;
-      
-      // Process each file
-      let completed = 0;
-      
-      uploadedFiles.forEach((file, index) => {
-        const reader = new FileReader();
-        
-        reader.onload = function(e) {
-          const markdownContent = e.target.result;
-          
-          // Process MATLAB code blocks for formula conversion
-          const processedContent = processMatlabContent(markdownContent);
-          const htmlContent = md.render(processedContent);
-          
-          // Create styled HTML for Word conversion
-          const styledHtml = createStyledHtml(htmlContent, selectedTemplate, includeToc);
-          
-          // Convert HTML to Word
-          setTimeout(() => {
-            try {
-              const blob = htmlDocx.asBlob(styledHtml);
-              
-              // Create result item
-              const resultItem = document.createElement('div');
-              resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
-              resultItem.innerHTML = `
-                <div class="flex items-center">
-                  <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                    <i class="fa fa-check text-green-500"></i>
-                  </div>
-                  <div>
-                    <p class="font-medium text-gray-800">${file.name.replace(/\.[^/.]+$/, '')}.docx</p>
-                    <p class="text-xs text-gray-500">${formatFileSize(blob.size)}</p>
-                  </div>
-                </div>
-                <button class="download-btn bg-secondary hover:bg-primary text-white px-4 py-2 rounded-lg transition-custom">
-                  <i class="fa fa-download mr-1"></i> Download
-                </button>
-              `;
-              
-              resultsList.appendChild(resultItem);
-              
-              // Add download event
-              const downloadBtn = resultItem.querySelector('.download-btn');
-              downloadBtn.addEventListener('click', () => {
-                saveAs(blob, `${file.name.replace(/\.[^/.]+$/, '')}.docx`);
-                showNotification('File downloaded successfully');
-              });
-              
-            } catch (error) {
-              console.error('Conversion error:', error);
-              
-              // Create error result item
-              const resultItem = document.createElement('div');
-              resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
-              resultItem.innerHTML = `
-                <div class="flex items-center">
-                  <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                    <i class="fa fa-times text-red-500"></i>
-                  </div>
-                  <div>
-                    <p class="font-medium text-gray-800">${file.name}</p>
-                    <p class="text-xs text-red-500">Conversion failed</p>
-                  </div>
-                </div>
-                <button class="retry-btn bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg transition-custom">
-                  <i class="fa fa-refresh mr-1"></i> Retry
-                </button>
-              `;
-              
-              resultsList.appendChild(resultItem);
-              
-              // Add retry event
-              const retryBtn = resultItem.querySelector('.retry-btn');
-              retryBtn.addEventListener('click', () => {
-                // Remove this result
-                resultsList.removeChild(resultItem);
-                
-                // Re-process this file
-                processSingleFile(file);
-              });
-            }
-            
-            // Update progress
-            completed++;
-            const progress = Math.round((completed / uploadedFiles.length) * 100);
-            progressBar.style.width = `${progress}%`;
-            progressPercentage.textContent = `${progress}%`;
-            
-            // Hide progress when done
-            if (completed === uploadedFiles.length) {
-              setTimeout(() => {
-                progressContainer.classList.add('hidden');
-              }, 500);
-              
-              showNotification('Conversion completed!');
-            }
-          }, index * 500); // Stagger conversions
-        };
-        
-        reader.readAsText(file);
-      });
-    }
-    
-    // Process a single file for conversion
-    function processSingleFile(file) {
-      const reader = new FileReader();
-      
-      reader.onload = function(e) {
-        const markdownContent = e.target.result;
-        
-        // Process MATLAB code blocks for formula conversion
-        const processedContent = processMatlabContent(markdownContent);
-        const htmlContent = md.render(processedContent);
-        
-        // Get selected template
-        const selectedTemplate = document.querySelector('.template-option.selected').textContent.trim().toLowerCase().includes('professional') ? 'professional' : 'standard';
-        
-        // Get format options
-        const includeToc = document.querySelectorAll('input[type="checkbox"]')[1].checked;
-        
-        // Create styled HTML for Word conversion
-        const styledHtml = createStyledHtml(htmlContent, selectedTemplate, includeToc);
-        
         try {
+          // 处理MATLAB代码块的公式转换
+          let processedContent = processMatlabContent(editorContent);
+          
+          // 处理图片（如果有文件夹上传）
+          if (fileMap.size > 0) {
+            // 替换图片路径为dataURL
+            const promises = [];
+            const matches = processedContent.match(/!\[(.*?)\]\((.*?)\)/g) || [];
+            
+            matches.forEach(match => {
+              const pathMatch = match.match(/!\[(.*?)\]\((.*?)\)/);
+              if (pathMatch && pathMatch[2]) {
+                const path = pathMatch[2];
+                const normalizedPath = normalizePath(path);
+                
+                // 查找匹配的图片文件
+                for (const key of fileMap.keys()) {
+                  if (key.endsWith(normalizedPath) || normalizePath(key) === normalizedPath) {
+                    const imageFile = fileMap.get(key);
+                    const promise = new Promise(resolveImg => {
+                      const imageReader = new FileReader();
+                      imageReader.onload = function(imgEvent) {
+                        processedContent = processedContent.replace(path, imgEvent.target.result);
+                        resolveImg();
+                      };
+                      imageReader.readAsDataURL(imageFile);
+                    });
+                    promises.push(promise);
+                    break;
+                  }
+                }
+              }
+            });
+            
+            // 等待所有图片处理完成
+            await Promise.all(promises);
+          }
+          
+          // 转换为HTML
+          const htmlContent = md.render(processedContent);
+          const styledHtml = createStyledHtml(htmlContent, selectedTemplate, includeToc);
           const blob = htmlDocx.asBlob(styledHtml);
           
-          // Create result item
+          // 创建结果项
           const resultItem = document.createElement('div');
           resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
           resultItem.innerHTML = `
@@ -1057,7 +961,7 @@
                 <i class="fa fa-check text-green-500"></i>
               </div>
               <div>
-                <p class="font-medium text-gray-800">${file.name.replace(/\.[^/.]+$/, '')}.docx</p>
+                <p class="font-medium text-gray-800">document.docx</p>
                 <p class="text-xs text-gray-500">${formatFileSize(blob.size)}</p>
               </div>
             </div>
@@ -1068,17 +972,19 @@
           
           resultsList.appendChild(resultItem);
           
-          // Add download event
+          // 添加下载事件
           const downloadBtn = resultItem.querySelector('.download-btn');
           downloadBtn.addEventListener('click', () => {
-            saveAs(blob, `${file.name.replace(/\.[^/.]+$/, '')}.docx`);
+            saveAs(blob, 'document.docx');
             showNotification('File downloaded successfully');
           });
+          
+          showNotification('Conversion completed!');
           
         } catch (error) {
           console.error('Conversion error:', error);
           
-          // Create error result item
+          // 创建错误结果项
           const resultItem = document.createElement('div');
           resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
           resultItem.innerHTML = `
@@ -1087,7 +993,7 @@
                 <i class="fa fa-times text-red-500"></i>
               </div>
               <div>
-                <p class="font-medium text-gray-800">${file.name}</p>
+                <p class="font-medium text-gray-800">document.docx</p>
                 <p class="text-xs text-red-500">Conversion failed</p>
               </div>
             </div>
@@ -1098,426 +1004,164 @@
           
           resultsList.appendChild(resultItem);
           
-          // Add retry event
+          // 添加重试事件
           const retryBtn = resultItem.querySelector('.retry-btn');
           retryBtn.addEventListener('click', () => {
-            // Remove this result
+            // 移除该结果
             resultsList.removeChild(resultItem);
             
-            // Re-process this file
-            processSingleFile(file);
+            // 重新处理
+            convertFiles();
           });
         }
-      };
-      
-      reader.readAsText(file);
-    }
-    
-    // Create styled HTML for Word conversion
-    function createStyledHtml(htmlContent, template, includeToc) {
-      // Template styles
-      let styles = '';
-      
-      if (template === 'standard') {
-        styles = `
-          body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-          }
-          h1, h2, h3, h4, h5, h6 {
-            color: #1e40af;
-            margin-top: 24px;
-            margin-bottom: 16px;
-            font-weight: 600;
-            line-height: 1.25;
-          }
-          h1 {
-            font-size: 2em;
-            border-bottom: 1px solid #eaecef;
-            padding-bottom: 0.3em;
-          }
-          h2 {
-            font-size: 1.5em;
-            border-bottom: 1px solid #eaecef;
-            padding-bottom: 0.3em;
-          }
-          p {
-            margin-top: 0;
-            margin-bottom: 16px;
-          }
-          a {
-            color: #0366d6;
-            text-decoration: none;
-          }
-          a:hover {
-            text-decoration: underline;
-          }
-          ul, ol {
-            padding-left: 2em;
-            margin-top: 0;
-            margin-bottom: 16px;
-          }
-          li {
-            margin-bottom: 0.25em;
-          }
-          blockquote {
-            padding: 0 1em;
-            color: #6a737d;
-            border-left: 0.25em solid #dfe2e5;
-            margin: 0 0 16px 0;
-          }
-          pre {
-            background-color: #f6f8fa;
-            border-radius: 3px;
-            padding: 16px;
-            overflow: auto;
-            font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace;
-            font-size: 85%;
-            line-height: 1.45;
-            margin-bottom: 16px;
-          }
-          code {
-            font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace;
-            font-size: 85%;
-            padding: 0.2em 0.4em;
-            margin: 0;
-            background-color: rgba(27, 31, 35, 0.05);
-            border-radius: 3px;
-          }
-          pre code {
-            background-color: transparent;
-            padding: 0;
-            margin: 0;
-          }
-          table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-bottom: 16px;
-          }
-          table th, table td {
-            padding: 6px 13px;
-            border: 1px solid #dfe2e5;
-          }
-          table tr {
-            background-color: #fff;
-            border-top: 1px solid #c6cbd1;
-          }
-          table tr:nth-child(2n) {
-            background-color: #f6f8fa;
-          }
-          img {
-            max-width: 100%;
-            box-sizing: content-box;
-            background-color: #fff;
-          }
-        `;
-      } else {
-        // Professional template
-        styles = `
-          body {
-            font-family: "Times New Roman", serif;
-            line-height: 1.8;
-            color: #000;
-            max-width: 210mm;
-            margin: 0 auto;
-            padding: 2cm;
-            background-color: #fff;
-          }
-          h1, h2, h3, h4, h5, h6 {
-            color: #000;
-            margin-top: 30px;
-            margin-bottom: 20px;
-            font-weight: bold;
-            line-height: 1.3;
-          }
-          h1 {
-            font-size: 2.2em;
-            text-align: center;
-            margin-top: 0;
-            margin-bottom: 30px;
-            border-bottom: 3px solid #000;
-            padding-bottom: 10px;
-          }
-          h2 {
-            font-size: 1.8em;
-            border-bottom: 2px solid #000;
-            padding-bottom: 8px;
-          }
-          h3 {
-            font-size: 1.5em;
-            border-bottom: 1px solid #ccc;
-            padding-bottom: 5px;
-          }
-          p {
-            margin-top: 0;
-            margin-bottom: 20px;
-            text-align: justify;
-            text-indent: 2em;
-          }
-          a {
-            color: #0000ff;
-            text-decoration: none;
-          }
-          a:hover {
-            text-decoration: underline;
-          }
-          ul, ol {
-            padding-left: 2em;
-            margin-top: 0;
-            margin-bottom: 20px;
-          }
-          li {
-            margin-bottom: 8px;
-            text-align: justify;
-          }
-          blockquote {
-            padding: 15px 20px;
-            color: #333;
-            border-left: 4px solid #666;
-            margin: 20px 0;
-            background-color: #f9f9f9;
-            font-style: italic;
-          }
-          pre {
-            background-color: #f5f5f5;
-            border-radius: 5px;
-            padding: 15px;
-            overflow: auto;
-            font-family: "Courier New", monospace;
-            font-size: 90%;
-            line-height: 1.5;
-            margin-bottom: 20px;
-            border: 1px solid #ddd;
-          }
-          code {
-            font-family: "Courier New", monospace;
-            font-size: 90%;
-            padding: 2px 5px;
-            margin: 0;
-            background-color: #f5f5f5;
-            border-radius: 3px;
-            border: 1px solid #ddd;
-          }
-          pre code {
-            background-color: transparent;
-            padding: 0;
-            margin: 0;
-            border: none;
-          }
-          table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-bottom: 20px;
-            border: 1px solid #000;
-          }
-          table th, table td {
-            padding: 10px 15px;
-            border: 1px solid #000;
-            text-align: left;
-          }
-          table th {
-            background-color: #f0f0f0;
-            font-weight: bold;
-          }
-          table tr:nth-child(2n) {
-            background-color: #f9f9f9;
-          }
-          img {
-            max-width: 100%;
-            box-sizing: content-box;
-            background-color: #fff;
-            display: block;
-            margin: 20px auto;
-          }
-          .toc {
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            padding: 20px;
-            margin-bottom: 30px;
-          }
-          .toc h2 {
-            text-align: center;
-            border-bottom: none;
-            margin-top: 0;
-          }
-          .toc ul {
-            list-style-type: none;
-            padding-left: 0;
-          }
-          .toc li {
-            margin-bottom: 5px;
-          }
-          .toc a {
-            color: #000;
-            text-decoration: none;
-          }
-          .toc a:hover {
-            text-decoration: underline;
-          }
-          .toc-h2 {
-            font-weight: bold;
-          }
-          .toc-h3 {
-            padding-left: 20px;
-            font-size: 0.95em;
-          }
-        `;
+        
+        return;
       }
       
-      // Generate table of contents if enabled
-      let toc = '';
-      if (includeToc && template === 'professional') {
-        // Extract headings from HTML
-        const headingRegex = /<h([23])([^>]*)>(.*?)<\/h[23]>/g;
-        let match;
-        let tocItems = [];
+      if (uploadedFiles.length === 0) return;
+      
+      // 显示结果容器和进度条
+      resultsContainer.classList.remove('hidden');
+      progressContainer.classList.remove('hidden');
+      
+      // 重置进度
+      progressBar.style.width = '0%';
+      progressPercentage.textContent = '0%';
+      
+      // 滚动到结果区域
+      resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      
+      // 清除之前的结果
+      resultsList.innerHTML = '';
+      
+      // 获取选中的模板
+      const selectedTemplate = document.querySelector('.template-option.selected').textContent.trim().toLowerCase().includes('professional') ? 'professional' : 'standard';
+      
+      // 获取格式选项
+      const preserveFormatting = document.querySelector('input[type="checkbox"]').checked;
+      const includeToc = document.querySelectorAll('input[type="checkbox"]')[1].checked;
+      
+      // 处理每个文件
+      for (let i = 0; i < uploadedFiles.length; i++) {
+        const file = uploadedFiles[i];
+        const reader = new FileReader();
         
-        while ((match = headingRegex.exec(htmlContent)) !== null) {
-          const level = match[1];
-          const attributes = match[2];
-          const text = match[3].replace(/<[^>]*>/g, '');
-          const id = attributes.match(/id="([^"]*)"/) ? attributes.match(/id="([^"]*)"/)[1] : text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-          
-          tocItems.push({
-            level,
-            text,
-            id
-          });
-        }
-        
-        if (tocItems.length > 0) {
-          toc = `
-            <div class="toc">
-              <h2>Table of Contents</h2>
-              <ul>
-          `;
-          
-          tocItems.forEach(item => {
-            const indent = item.level === '3' ? 'toc-h3' : 'toc-h2';
-            toc += `
-              <li class="${indent}">
-                <a href="#${item.id}">${item.text}</a>
-              </li>
+        await new Promise(resolve => {
+          reader.onload = async function(e) {
+            let content = e.target.result;
+            
+            // 处理图片
+            if (fileMap.size > 0) {
+              // 使用正则替换图片路径为dataURL
+              const promises = [];
+              const matches = content.match(/!\[(.*?)\]\((.*?)\)/g) || [];
+              
+              matches.forEach(match => {
+                const pathMatch = match.match(/!\[(.*?)\]\((.*?)\)/);
+                if (pathMatch && pathMatch[2]) {
+                  const path = pathMatch[2];
+                  const normalizedPath = normalizePath(path);
+                  
+                  // 查找匹配的图片文件
+                  for (const key of fileMap.keys()) {
+                    if (key.endsWith(normalizedPath) || normalizePath(key) === normalizedPath) {
+                      const imageFile = fileMap.get(key);
+                      const promise = new Promise(resolveImg => {
+                        const imageReader = new FileReader();
+                        imageReader.onload = function(imgEvent) {
+                          content = content.replace(path, imgEvent.target.result);
+                          resolveImg();
+                        };
+                        imageReader.readAsDataURL(imageFile);
+                      });
+                      promises.push(promise);
+                      break;
+                    }
+                  }
+                }
+              });
+              
+              // 等待所有图片处理完成
+              await Promise.all(promises);
+            }
+            
+            // 处理MATLAB代码块的公式转换
+            const processedContent = processMatlabContent(content);
+            
+            // 转换为HTML
+            const htmlContent = md.render(processedContent);
+            const styledHtml = createStyledHtml(htmlContent, selectedTemplate, includeToc);
+            
+            // 转换为Word文档
+            const blob = htmlDocx.asBlob(styledHtml);
+            
+            // 创建结果项
+            const resultItem = document.createElement('div');
+            resultItem.className = 'bg-gray-50 p-4 rounded-lg flex items-center justify-between';
+            
+            // 获取文件名（不含扩展名）
+            const fileName = file.name.replace(/\.(md|markdown|txt)$/i, '');
+            
+            resultItem.innerHTML = `
+              <div class="flex items-center">
+                <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                  <i class="fa fa-check text-green-500"></i>
+                </div>
+                <div>
+                  <p class="font-medium text-gray-800">${fileName}.docx</p>
+                  <p class="text-xs text-gray-500">${formatFileSize(blob.size)}</p>
+                </div>
+              </div>
+              <button class="download-btn bg-secondary hover:bg-primary text-white px-4 py-2 rounded-lg transition-custom">
+                <i class="fa fa-download mr-1"></i> Download
+              </button>
             `;
-          });
+            
+            resultsList.appendChild(resultItem);
+            
+            // 添加下载事件
+            const downloadBtn = resultItem.querySelector('.download-btn');
+            downloadBtn.addEventListener('click', () => {
+              saveAs(blob, `${fileName}.docx`);
+              showNotification('File downloaded successfully');
+            });
+            
+            resolve();
+          };
           
-          toc += `
-              </ul>
-            </div>
-          `;
-        }
+          reader.readAsText(file);
+        });
+        
+        // 更新进度
+        updateProgress(((i + 1) / uploadedFiles.length) * 100);
       }
       
-      // Return complete HTML
-      return `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>Document</title>
-          <style>
-            ${styles}
-          </style>
-        </head>
-        <body>
-          ${toc}
-          ${htmlContent}
-        </body>
-        </html>
-      `;
+      // 隐藏进度条
+      setTimeout(() => {
+        progressContainer.classList.add('hidden');
+      }, 500);
+      
+      showNotification('All files converted successfully!');
     }
     
-    // Toggle dark/light theme
-    function toggleTheme() {
-      isDarkMode = !isDarkMode;
-      
-      if (isDarkMode) {
-        document.body.classList.add('dark');
-        themeToggle.innerHTML = '<i class="fa fa-sun-o"></i>';
-        
-        // Add dark mode styles
-        const style = document.createElement('style');
-        style.id = 'dark-mode-styles';
-        style.textContent = `
-          .dark {
-            background-color: #1f2937;
-            color: #f9fafb;
-          }
-          .dark .bg-white {
-            background-color: #374151;
-          }
-          .dark .text-gray-800 {
-            color: #f9fafb;
-          }
-          .dark .text-gray-700 {
-            color: #e5e7eb;
-          }
-          .dark .text-gray-600 {
-            color: #d1d5db;
-          }
-          .dark .text-gray-500 {
-            color: #9ca3af;
-          }
-          .dark .border-gray-200 {
-            border-color: #4b5563;
-          }
-          .dark .border-gray-300 {
-            border-color: #4b5563;
-          }
-          .dark .bg-gray-50 {
-            background-color: #2d3748;
-          }
-          .dark .bg-light {
-            background-color: #2563eb;
-          }
-          .dark .bg-gray-200 {
-            background-color: #4b5563;
-          }
-          .dark .text-secondary {
-            color: #93c5fd;
-          }
-          .dark pre {
-            background-color: #1f2937;
-            color: #f9fafb;
-          }
-          .dark code {
-            background-color: #374151;
-            color: #f9fafb;
-          }
-          .dark table tr {
-            background-color: #374151;
-          }
-          .dark table tr:nth-child(2n) {
-            background-color: #4b5563;
-          }
-          .dark blockquote {
-            color: #d1d5db;
-            border-left-color: #4b5563;
-            background-color: #2d3748;
-          }
-        `;
-        
-        document.head.appendChild(style);
-      } else {
-        document.body.classList.remove('dark');
-        themeToggle.innerHTML = '<i class="fa fa-moon-o"></i>';
-        
-        // Remove dark mode styles
-        const darkStyles = document.getElementById('dark-mode-styles');
-        if (darkStyles) {
-          darkStyles.remove();
-        }
-      }
+    // Update progress bar
+    function updateProgress(percentage) {
+      progressBar.style.width = `${percentage}%`;
+      progressPercentage.textContent = `${Math.round(percentage)}%`;
+    }
+    
+    // Format file size for display
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      else return (bytes / 1048576).toFixed(1) + ' MB';
     }
     
     // Show notification
     function showNotification(message, type = 'success') {
       notificationMessage.textContent = message;
       
+      // Set notification color based on type
       if (type === 'error') {
         notification.classList.remove('bg-green-500');
         notification.classList.add('bg-red-500');
@@ -1526,25 +1170,118 @@
         notification.classList.add('bg-green-500');
       }
       
+      // Show notification
       notification.classList.remove('translate-y-20', 'opacity-0');
       
+      // Hide after 3 seconds
       setTimeout(() => {
         notification.classList.add('translate-y-20', 'opacity-0');
       }, 3000);
     }
     
-    // Format file size
-    function formatFileSize(bytes) {
-      if (bytes === 0) return '0 Bytes';
+    // Toggle dark/light theme
+    function toggleTheme() {
+      isDarkMode = !isDarkMode;
+      document.body.classList.toggle('bg-gray-900');
+      document.body.classList.toggle('bg-gray-50');
       
-      const k = 1024;
-      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      const themeIcon = themeToggle.querySelector('i');
+      if (isDarkMode) {
+        themeIcon.classList.remove('fa-moon-o');
+        themeIcon.classList.add('fa-sun-o');
+      } else {
+        themeIcon.classList.remove('fa-sun-o');
+        themeIcon.classList.add('fa-moon-o');
+      }
       
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      // Add more theme toggling logic as needed
     }
     
-    // Initialize the application when DOM is loaded
+    // Create styled HTML for Word document
+    function createStyledHtml(content, template = 'standard', includeToc = false) {
+      // Base styles
+      let styles = `
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }
+          h1, h2, h3, h4, h5, h6 { color: #1e40af; margin-top: 1.5em; margin-bottom: 0.5em; }
+          h1 { border-bottom: 2px solid #3b82f6; padding-bottom: 0.3em; }
+          h2 { border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3em; }
+          p { margin-top: 0; margin-bottom: 1em; }
+          ul, ol { margin-top: 0; margin-bottom: 1em; padding-left: 2em; }
+          a { color: #3b82f6; text-decoration: none; }
+          a:hover { text-decoration: underline; }
+          pre { background-color: #f3f4f6; padding: 1em; border-radius: 4px; overflow-x: auto; margin-bottom: 1em; }
+          code { font-family: Consolas, monospace; font-size: 0.9em; }
+          blockquote { border-left: 4px solid #3b82f6; padding-left: 1em; margin-left: 0; color: #6b7280; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
+          th, td { border: 1px solid #e5e7eb; padding: 0.5em 1em; text-align: left; }
+          th { background-color: #eff6ff; }
+          img { max-width: 100%; height: auto; margin: 1em 0; }
+        </style>
+      `;
+      
+      // Professional template styles
+      if (template === 'professional') {
+        styles = `
+          <style>
+            body { font-family: 'Times New Roman', Times, serif; line-height: 1.8; color: #222; max-width: 900px; margin: 0 auto; padding: 40px; }
+            h1, h2, h3, h4, h5, h6 { color: #1e3a8a; font-weight: bold; margin-top: 2em; margin-bottom: 1em; }
+            h1 { font-size: 2em; text-align: center; margin-bottom: 1.5em; }
+            h2 { font-size: 1.5em; border-bottom: 1px solid #1e3a8a; padding-bottom: 0.3em; }
+            p { margin-top: 0; margin-bottom: 1.5em; text-align: justify; }
+            ul, ol { margin-top: 0; margin-bottom: 1.5em; padding-left: 2.5em; }
+            a { color: #1e40af; text-decoration: underline; }
+            pre { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 1em; border-radius: 2px; overflow-x: auto; margin-bottom: 1.5em; }
+            code { font-family: 'Courier New', monospace; font-size: 0.9em; }
+            blockquote { border-left: 3px solid #1e40af; padding-left: 1.5em; margin-left: 0; margin-bottom: 1.5em; font-style: italic; }
+            table { border-collapse: collapse; width: 100%; margin-bottom: 1.5em; }
+            th, td { border: 1px solid #cbd5e1; padding: 0.7em 1.2em; text-align: left; }
+            th { background-color: #eff6ff; font-weight: bold; }
+            img { max-width: 100%; height: auto; margin: 2em auto; display: block; }
+            .toc { margin: 2em 0 3em 0; padding: 1em; border: 1px solid #e2e8f0; }
+            .toc-title { font-weight: bold; margin-bottom: 0.5em; font-size: 1.2em; }
+          </style>
+        `;
+      }
+      
+      // Generate table of contents if needed
+      let toc = '';
+      if (includeToc) {
+        toc = '<div class="toc"><p class="toc-title">Table of Contents</p><ul>';
+        
+        // Simple TOC generation - would need more sophisticated parsing for production use
+        const headings = content.match(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi) || [];
+        headings.forEach(heading => {
+          const level = heading.match(/<h([1-6])/)[1];
+          const text = heading.replace(/<\/?h[1-6][^>]*>/g, '');
+          const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          
+          toc += `<li style="margin-left: ${(level - 1) * 15}px;"><a href="#${id}">${text}</a></li>`;
+          
+          // Add ID to heading for anchor links
+          content = content.replace(heading, heading.replace(/<h([1-6])/, `<h$1 id="${id}"`));
+        });
+        
+        toc += '</ul></div>';
+      }
+      
+      // Return complete HTML document
+      return `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            ${styles}
+          </head>
+          <body>
+            ${toc}
+            ${content}
+          </body>
+        </html>
+      `;
+    }
+    
+    // Initialize the app when DOM is loaded
     document.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
